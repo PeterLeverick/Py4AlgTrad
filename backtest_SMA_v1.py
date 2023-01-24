@@ -32,7 +32,7 @@ import kraken_libs
 # 1/ ------------   Get prices  
 
 ''' get ohlc from kraken '''
-def get_ohlc(crypto_pair='ETHUSDT', interval='15'):
+def get_ohlc(crypto_pair='ETHUSDT', interval='1440'):
     what_column = ['Close']
     asset_df = kraken_libs.kraken_ohlc_lib.main(crypto_pair, interval) 
     last_date_ohlc = asset_df.index[-1]                                 # this should be second last close (last row dropped in ohlc lib)

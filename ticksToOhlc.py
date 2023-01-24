@@ -63,30 +63,29 @@ from requests.exceptions import HTTPError
 # Check pandas version
 print(f"\n Pandas version --> {pd.__version__}\n")
 #print(pd.__version__)
-g = input("press any key : ") 
 
 #url kraken 
 url = 'https://api.kraken.com/0/public/Trades' 
 
 ## 1st since for kraken 
 from datetime import datetime
-since = datetime(2022, 12, 31, 19, 00, 00000)  
+since = datetime(2019, 12, 31, 19, 00, 00000)  
 since = datetime.timestamp(since)
 print("timestamp =", since)
 since = str(since)
-since = since[0:10] + '0'* 9
+since = since[0:10] + '0'* 9            ## should it be integer in new api version ??
 print(since)
 
 #my_origin for resampling 
-myorigin='2022-12-31 19:00:00'  # string should be equal to since and now 
+myorigin='2019-12-31 19:00:00'  # string should be equal to since and now 
 
 # Dates while loop   
-now = datetime(2022, 12, 31, 19, 00, 00000)
+now = datetime(2019, 12, 31, 19, 00, 00000)
 print(now)
 now = int(datetime.timestamp(now))
 print(now)
 
-end = datetime(2023, 1, 20, 19, 00, 00000) #Eastern
+end = datetime(2021, 2, 3, 19, 00, 00000) #Eastern
 print(end)
 end = int(datetime.timestamp(end))
 print(end)
@@ -114,6 +113,7 @@ t_name_csv = 'master_ticks.csv'
 ticks_csv = t_path_csv + t_name_csv
 ticks_csv
 
+# 0 get ticks within the timeframe from API and store them into a list 
 while now <= end:
     
     print('time --> {}    date --> {}'.format(now, ctime(now)))
@@ -166,29 +166,40 @@ while now <= end:
             print(f'end while: {err}')  # Python 3.6
             break 
 
-# ' tranform list into a DataFrame df and work out  OHLC .... '
+# 1 ' tranform list into a DataFrame df and work out  OHLC .... '
 print (' tranform list into a DataFrame df and work out  OHLC .... ')
 df = pd.DataFrame.from_records(l, columns=l_labels)   # l --> list, l_labels --> column names 
 df['Date'] = pd.to_datetime(df['Date'])
 df.set_index('Date', inplace=True) 
 
-#timeframe = 'D'
-#timeframe = '15Min'
-timeframe = '1440Min'
-
+# 2 resampling 
 # important to set origin (day:hour:min:sec origin), 1st tick might be delayed, so days close lagging 
 # origin works with pandas version 1.3.5 
 # label='right', closed='right' --> from 7pm to 7pm is tomorrow's close (take the label/close at the end not the begining) 
 # data_OHLC = pd.to_numeric(df['Price']).resample('1440min', origin='2022-12-31 19:00:00').ohlc()
-data_OHLC = pd.to_numeric(df['Price']).resample('1440min', origin=myorigin, label='right', closed='right').ohlc()
 
-# change columns names
-data_OHLC.columns = ["Open", "High", "Low", "Close"]
+# 2.1 OHLC
+timeframe = 'D'    # '1440min'   #timeframe = 'D'    #timeframe = '15Min'
+print (f"\nresampling timeframe --> {timeframe}")
+print (f"\nresampling timestamp origin --> {timeframe}")
+data_OHLC = pd.to_numeric(df['Price']).resample(timeframe, origin=myorigin, label='right', closed='right').ohlc()
+data_OHLC.columns = ["Open", "High", "Low", "Close"]    # change columns names
+print (data_OHLC.head())
 
-# export OHLC to csv
+# 2.2 Volume
+volume_OHLC = pd.to_numeric(df['Volume']).resample(timeframe, origin=myorigin, label='right', closed='right').sum()
+volume_OHLC = pd.DataFrame(volume_OHLC, columns=['Volume'])     #transform in df, date becomes index
+print (volume_OHLC.head())
+
+# 3 concat OHLC + Volume 
+data_OHLC = pd.concat([data_OHLC, volume_OHLC], axis="columns", join="outer")
+print (data_OHLC.head())
+print (data_OHLC.tail())
+
+# 4 export OHLC + Volume to csv
 data_OHLC.to_csv(OHLC_csv)
 
-# export all ticks to csv
+# 5 export ticks to csv
 l[1:10]
 l[-10:-1]
 df.to_csv(ticks_csv)
