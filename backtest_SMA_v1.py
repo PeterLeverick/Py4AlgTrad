@@ -2,6 +2,9 @@
     Author: Peter Leverick Nov 2022 
 
     Citation --> Python for Algo Trading (O'Reilly)
+
+    This version takes OHLC directly from API, last 720 points (if 1440, days) 
+
     Kindle 
     
 """

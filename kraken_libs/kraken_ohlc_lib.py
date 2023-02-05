@@ -115,6 +115,7 @@ def Process_Kraken_Jason(kraken_json, pair):
     while True:
         try:
             new_row = [ctime(kraken_json['result'][pair][i+1][0]),    # Date end day next day 
+            #new_row = [ctime(kraken_json['result'][pair][i][0]),    # 
                         kraken_json['result'][pair][i][1],           # Open                      
                         kraken_json['result'][pair][i][2],           # High                       
                         kraken_json['result'][pair][i][3],           # Low                       
@@ -169,7 +170,6 @@ def export_df_csv(df_all_prices):
 
 # --------- Main 
 
-#def main(crypto_pair, interval):
 def main(crypto_pair, interval=1440, since=0):
 
 
