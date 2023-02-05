@@ -1,12 +1,12 @@
 """ 
-    Author: Peter Leverick Nov 2022 
+    Author: Peter Leverick Jan 2023 
 
     Citation --> Python for Algo Trading (O'Reilly) Kindle 
 
     It requieres the 3.09 environment 
-
     This version gets OHLC from YAHOO FINANCE csv  --> https://finance.yahoo.com/quote/ETH-USD/history?p=ETH-USD
 
+    Module for Vectorized Backtesting of SMA-based strategies
 
 """
 
