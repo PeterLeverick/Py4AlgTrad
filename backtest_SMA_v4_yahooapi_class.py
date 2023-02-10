@@ -1,10 +1,10 @@
 """ 
-    Author: Peter Leverick Jan 2023 
+    Author: Peter Leverick Feb 2023 
 
     Citation --> Python for Algo Trading (O'Reilly) Kindle 
 
     It requieres the 3.09 environment 
-    This version gets OHLC from YAHOO FINANCE csv  --> https://finance.yahoo.com/quote/ETH-USD/history?p=ETH-USD
+    This version gets OHLC from yahoofinancials API  --> https://pypi.org/project/yahoofinancials/
 
     Module with Class for Vectorized Backtesting of SMA-based strategies
 
@@ -27,10 +27,11 @@ import matplotlib.pyplot as plt
 pd.plotting.register_matplotlib_converters()
 #%matplotlib inline   # This is needed if you're using Jupyter to visualize charts:
 import mplfinance as mpf
-#import csv
 
-#------- import libraries 
-import kraken_libs
+from yahoofinancials import YahooFinancials         # https://pypi.org/project/yahoofinancials/
+
+#------- import my libraries 
+
 
 ''' Class for the vectorized backtesting of SMA-based trading strategies'''
 class MAVectorBacktester(object):
@@ -38,7 +39,7 @@ class MAVectorBacktester(object):
     ''' 
     Attibutes
     symbol: str
-    SMA1: int   time window in days for shorter SMA
+    SMA1: int   time window in days for shorter EMA
     SMA2: int   time window in days for longer SMA
     start: str  start date for data 
     
@@ -55,20 +56,46 @@ class MAVectorBacktester(object):
 
     #--- get master ohlc from csv & prepare df 
     def get_data(self):
-        path_csv = './data/'
-        name_csv = 'master_ohlc_yahoo.csv'
-        OHLC_csv = path_csv + name_csv
-        asset_df = pd.read_csv(OHLC_csv, index_col = 'Date')
 
-        # Converting the dates from string to datetime format:
-        asset_df.index = pd.to_datetime(asset_df.index)
-        asset_df[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']] = asset_df[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']].apply(pd.to_numeric)
+        ''' get data from YahooFinancials api '''
+        yahoo_financials = YahooFinancials('ETH-USD')       # https://pypi.org/project/yahoofinancials/
+        response_json = yahoo_financials.get_historical_price_data("2017-01-01", "2023-02-09", "daily")
+        print(response_json)
+        l = []
+        l_labels = ['date', 'open','high', 'low', 'close', 'adjclose', 'volume']
 
-        #print (asset_df.head())
-        #print (asset_df.tail())
+        i = 0
+        while True:
+            try:
+                new_row =   [
+                            response_json['ETH-USD']['prices'][i]['formatted_date'],
+                            response_json['ETH-USD']['prices'][i]['open'],
+                            response_json['ETH-USD']['prices'][i]['high'],
+                            response_json['ETH-USD']['prices'][i]['low'],
+                            response_json['ETH-USD']['prices'][i]['close'],
+                            response_json['ETH-USD']['prices'][i]['adjclose'],
+                            response_json['ETH-USD']['prices'][i]['volume']
+                            ] 
+                l += [new_row]; i += 1
+            
+            except Exception as err:
+                print(f'end while: {err}')  # Python 3.6
+                break 
+
+        # 1 ' tranform list into a DataFrame df and work out  OHLC .... '
+        print (' tranform list into a DataFrame df and work out  OHLC .... ')
+        asset_df = pd.DataFrame.from_records(l, columns=l_labels)       # l --> list, l_labels --> column names 
+        asset_df['date'] = pd.to_datetime(asset_df['date'])            
+        asset_df.set_index('date', inplace=True) 
+        asset_df[['open','high', 'low', 'close', 'adjclose', 'volume']] = asset_df[['open','high', 'low', 'close', 'adjclose', 'volume']].apply(pd.to_numeric)
+
+        print(asset_df.head())
+        print(); print()
+        print(asset_df.tail())
+
 
         ''' clean df to only one price '''
-        what_column = ['Adj Close']         #can be more than one 
+        what_column = ['adjclose']         #can be more than one 
         raw_df = asset_df[what_column].copy()
         raw_df.rename(columns = {what_column[0]:'price'}, inplace = True)
         #print (f"\n len df {len(raw_df)}")
@@ -105,7 +132,7 @@ class MAVectorBacktester(object):
         aperf = data['cstrategy'].iloc[-1]
         #out/underperformance of strategy 
         operf = aperf - data['creturns'].iloc[-1]
-        print(f"GM symbol = {round(data['creturns'].iloc[-1],2)},   GM strategy = {round(aperf,2)},    Delta strategy - symbol = {operf,2}")
+        print(f"GM symbol = {round(data['creturns'].iloc[-1],2)},   GM strategy = {round(aperf,2)},    Delta strategy - symbol = {round(operf,2)}")
 
         return round(data['creturns'].iloc[-1],2), round(aperf,2), round(operf,2)
 
@@ -170,9 +197,9 @@ class MAVectorBacktester(object):
     
         with plt.style.context('fivethirtyeight'):
             fig = plt.figure(figsize=(14,7))
-            plt.plot(dates, price, linewidth=1.5, label='Price 1440min Adj Close')
-            plt.plot(dates, ma2, linewidth=2, label='SMA')
+            plt.plot(dates, price, linewidth=1.5, label='Price, Daily, AdjClose')
             plt.plot(dates, ma1, linewidth=2, label='EMA')
+            plt.plot(dates, ma2, linewidth=2, label='SMA')
             plt.title("EMA, SMA Crossover")
             plt.ylabel('Price($)')
             plt.legend()
@@ -199,11 +226,11 @@ class MAVectorBacktester(object):
 '''-----------------------------------------------------------------'''
 def main():
 
-    ''' xxx  '''
+    ''' instantiate the class '''
     #mabt =  MAVectorBacktester('ETH-USD', 42, 252, '2017', '2023') # <-- we know this is not the best
     #mabt =  MAVectorBacktester('ETH-USD', 50, 200, '2017', '2023')  # ggc 
     mabt =  MAVectorBacktester('ETH-USD', 30, 204, '2017', '2023')  # the best from previous optimization 
-    #g = input("call class .... Press any key : ")
+    g = input("instantiate the class .... Press any key : ")
 
     print(mabt.run_strategy())
     g = input("run strategy .... Press any key : ") 
@@ -246,3 +273,42 @@ if __name__== "__main__":
   g = input("End Program backtesting .... Press any key : "); print (g)
 
 
+'''
+     yahoo_financials = YahooFinancials('ETH-USD')
+    #print(yahoo_financials.get_historical_price_data("2018-01-01", "2023-02-10", "daily"))
+    response_json = yahoo_financials.get_historical_price_data("2017-01-01", "2023-02-09", "daily")
+    print(response_json)
+    print()
+    print()
+    l = []
+    l_labels = ['date', 'open','high', 'low', 'close', 'adjclose', 'volume']
+
+    i = 0
+    while True:
+        try:
+            new_row =   [
+                        response_json['ETH-USD']['prices'][i]['formatted_date'],
+                        response_json['ETH-USD']['prices'][i]['open'],
+                        response_json['ETH-USD']['prices'][i]['high'],
+                        response_json['ETH-USD']['prices'][i]['low'],
+                        response_json['ETH-USD']['prices'][i]['close'],
+                        response_json['ETH-USD']['prices'][i]['adjclose'],
+                        response_json['ETH-USD']['prices'][i]['volume']
+                        ] 
+            l += [new_row]; i += 1
+            
+        except Exception as err:
+            print(f'end while: {err}')  # Python 3.6
+            break 
+
+    # 1 ' tranform list into a DataFrame df and work out  OHLC .... '
+    print (' tranform list into a DataFrame df and work out  OHLC .... ')
+    df = pd.DataFrame.from_records(l, columns=l_labels)   # l --> list, l_labels --> column names 
+    df['date'] = pd.to_datetime(df['date'])
+    df.set_index('date', inplace=True) 
+    print(df.head())
+    print(); print()
+    print(df.tail())
+
+    return
+'''
