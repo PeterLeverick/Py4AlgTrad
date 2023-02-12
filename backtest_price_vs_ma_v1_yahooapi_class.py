@@ -118,7 +118,8 @@ class MAVectorBacktester(object):
         raw_df.dropna(inplace=True)
 
         ''' Shift '''
-        raw_df['shift'] = raw_df['price'].shift(1)
+        raw_df['shift+1'] = raw_df['price'].shift(1)    # previous row
+        raw_df['shift-1'] = raw_df['price'].shift(-1)    # next row
 
         print(raw_df.head())
         print(); print()
