@@ -6,7 +6,7 @@
     It requieres the 3.09 environment 
     This version gets OHLC from yahoofinancials API  --> https://pypi.org/project/yahoofinancials/
 
-    Module with Class for Vectorized Backtesting of SMA-based strategies
+    Stratehy based on the price vs ema --> above 1 long, below -1 short 
 
 """
 
@@ -33,6 +33,7 @@ from yahoofinancials import YahooFinancials         # https://pypi.org/project/y
 #------- import my libraries 
 
 
+#+------------ Class
 ''' Class for the vectorized backtesting of SMA-based trading strategies'''
 class MAVectorBacktester(object):
 
@@ -44,22 +45,21 @@ class MAVectorBacktester(object):
     start: str  start date for data 
     
     '''
-    def __init__(self, symbol, MA1, MA2, start, end):
+    def __init__(self, symbol, MA, start, end):
         self.symbol = symbol
-        self.MA1 = MA1
-        self.MA2 = MA2
+        self.MA = MA
         self.start = start
         self.end = end
         self.results = None
         self.get_data()
      
 
-    #--- get master ohlc from csv & prepare df 
+    #--- get master ohlc from yahoo api & prepare df 
     def get_data(self):
 
         ''' get data from YahooFinancials api '''
         yahoo_financials = YahooFinancials('ETH-USD')       # https://pypi.org/project/yahoofinancials/
-        response_json = yahoo_financials.get_historical_price_data("2017-01-01", "2023-02-09", "daily")
+        response_json = yahoo_financials.get_historical_price_data("2017-01-01", "2023-02-11", "daily")
         print(response_json)
         l = []
         l_labels = ['date', 'open','high', 'low', 'close', 'adjclose', 'volume']
@@ -103,12 +103,26 @@ class MAVectorBacktester(object):
         ''' calculate log returns  '''
         raw_df['returns'] = np.log(raw_df['price'] / raw_df['price'].shift(1))
 
-        ''' moving averages  '''
-        #ema_span = 50  #ggc
-        #sma_span = 200 #ggc 
-        raw_df['MA1'] = raw_df['price'].ewm(span=self.MA1).mean()   #exponential
-        raw_df['MA2'] = raw_df['price'].rolling(self.MA2).mean()    #simple 
+        ''' moving average  '''
+        #raw_df['ma'] = raw_df['price'].rolling(self.SMA).mean()    #simple moving average 
+        raw_df['ma'] = raw_df['price'].ewm(span=self.MA).mean()   #exponential
         raw_df.dropna(inplace=True)
+
+        ''' Standard Deviation '''
+        raw_df['std'] = raw_df['price'].rolling(self.MA).std()    
+        raw_df.dropna(inplace=True)
+
+        ''' Bollinger Bands '''
+        raw_df['bollup'] = raw_df['ma'] + (raw_df['std'] * 2)      # Calculate top band
+        raw_df['bolldown'] = raw_df['ma'] - (raw_df['std'] * 2)    # Calculate bottom band
+        raw_df.dropna(inplace=True)
+
+        ''' Shift '''
+        raw_df['shift'] = raw_df['price'].shift(1)
+
+        print(raw_df.head())
+        print(); print()
+        print(raw_df.tail())
 
         self.data = raw_df
 
@@ -116,14 +130,15 @@ class MAVectorBacktester(object):
     #--- Backtest the trading strategy 
     def run_strategy(self):
 
+        # compute 
         data = self.data.copy().dropna()
-        data['position'] = np.where(data['MA1'] > data['MA2'], 1, -1)
+        data['position'] = np.where(data['price'] > data['ma'], 1, -1)
         data['strategy'] = data['position'].shift(1) * data['returns']
         data.dropna(inplace=True)
         data['creturns'] = data['returns'].cumsum().apply(np.exp)
         data['cstrategy'] = data['strategy'].cumsum().apply(np.exp)
         self.results = data 
-        #print(self.results)
+        print(self.results)
 
         #gross performance of the symbol
         aperf = data['creturns'].iloc[-1]
@@ -133,6 +148,12 @@ class MAVectorBacktester(object):
         #out/underperformance of strategy 
         operf = aperf - data['creturns'].iloc[-1]
         print(f"GM symbol = {round(data['creturns'].iloc[-1],2)},   GM strategy = {round(aperf,2)},    Delta strategy - symbol = {round(operf,2)}")
+
+        # export to csv to analyse data 
+        t_path_csv = './data/'
+        t_name_csv = 'returns.csv'
+        returns_csv = t_path_csv + t_name_csv
+        self.results.to_csv(returns_csv)
 
         return round(data['creturns'].iloc[-1],2), round(aperf,2), round(operf,2)
 
@@ -170,13 +191,21 @@ class MAVectorBacktester(object):
     ''' plot Price  <-- Adj Close '''
     def plot_price(self):
 
+        # self.data = self.data.iloc[-200:,:]   to limit plot and data to last X records !!! warning it also changes self.data             
+        
         dates = self.data.index
         price = self.data['price']
+        ma = self.data['ma']
+        bollup = self.data['bollup']
+        bolldown = self.data['bolldown']
     
         with plt.style.context('fivethirtyeight'):
             fig = plt.figure(figsize=(14,7))
             plt.plot(dates, price, linewidth=1.5, label='Day Adj Close')
-            plt.title("Yahoo Finance ETH-USD Day Adj-Close")
+            plt.plot(dates, ma, linewidth=1.5, label='ma')
+            plt.plot(dates, bollup, linewidth=2, label='boll top')
+            plt.plot(dates, bolldown, linewidth=2, label='boll bottom')
+            plt.title("Yahoo Finance ETH-USD Day Adj-Close, sma, bollinger")
             plt.ylabel('Price($)')
             plt.legend()
     
@@ -229,11 +258,16 @@ def main():
     ''' instantiate the class '''
     #mabt =  MAVectorBacktester('ETH-USD', 42, 252, '2017', '2023') # <-- we know this is not the best
     #mabt =  MAVectorBacktester('ETH-USD', 50, 200, '2017', '2023')  # ggc 
-    mabt =  MAVectorBacktester('ETH-USD', 30, 204, '2017', '2023')  # the best from previous optimization 
+    mabt =  MAVectorBacktester('ETH-USD', 20, '2017', '2023')  # the best from previous optimization 
     g = input("instantiate the class .... Press any key : ")
+
+    mabt.plot_price()
+    g = input("plot price + SMA + Boellinger  .... Press any key : ") 
 
     print(mabt.run_strategy())
     g = input("run strategy .... Press any key : ") 
+
+    return
 
     mabt.plot_strategy()
     g = input("plot strategy results .... Press any key : ") 
@@ -273,42 +307,3 @@ if __name__== "__main__":
   g = input("End Program backtesting .... Press any key : "); print (g)
 
 
-'''
-     yahoo_financials = YahooFinancials('ETH-USD')
-    #print(yahoo_financials.get_historical_price_data("2018-01-01", "2023-02-10", "daily"))
-    response_json = yahoo_financials.get_historical_price_data("2017-01-01", "2023-02-09", "daily")
-    print(response_json)
-    print()
-    print()
-    l = []
-    l_labels = ['date', 'open','high', 'low', 'close', 'adjclose', 'volume']
-
-    i = 0
-    while True:
-        try:
-            new_row =   [
-                        response_json['ETH-USD']['prices'][i]['formatted_date'],
-                        response_json['ETH-USD']['prices'][i]['open'],
-                        response_json['ETH-USD']['prices'][i]['high'],
-                        response_json['ETH-USD']['prices'][i]['low'],
-                        response_json['ETH-USD']['prices'][i]['close'],
-                        response_json['ETH-USD']['prices'][i]['adjclose'],
-                        response_json['ETH-USD']['prices'][i]['volume']
-                        ] 
-            l += [new_row]; i += 1
-            
-        except Exception as err:
-            print(f'end while: {err}')  # Python 3.6
-            break 
-
-    # 1 ' tranform list into a DataFrame df and work out  OHLC .... '
-    print (' tranform list into a DataFrame df and work out  OHLC .... ')
-    df = pd.DataFrame.from_records(l, columns=l_labels)   # l --> list, l_labels --> column names 
-    df['date'] = pd.to_datetime(df['date'])
-    df.set_index('date', inplace=True) 
-    print(df.head())
-    print(); print()
-    print(df.tail())
-
-    return
-'''
